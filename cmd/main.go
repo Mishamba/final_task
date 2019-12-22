@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 
 	db "github.com/Mishamba/final_task/data_process"
 	jwt "github.com/Mishamba/final_task/jwt_process"
@@ -105,6 +104,8 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 				Value:   jwtToSend,
 				Expires: expireTime,
 			})
+
+			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -128,26 +129,61 @@ func handleTweetForm(w http.ResponseWriter, r *http.Request) {
 
 //	In this function user will create and post tweet
 func handleTweetCreate(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("jwt")
+	if err != nil {
+		if err == http.ErrNoCookie {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tokenString := c.Value
+
+	ok, status, username, err := jwt.DecodeToken(tokenString)
+	if !ok || err != nil {
+		w.WriteHeader(status)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		fmt.Fprint(w, err)
 		http.ServeFile(w, r, "error.html")
-
 		return
 	}
 
-	iD, err := strconv.Atoi(r.FormValue("userID"))
-	if err != nil {
-		fmt.Fprint(w, err)
-		http.ServeFile(w, r, "error.html")
-		return
-	}
-	//	TODO
-	db.PostTweet(r.FormValue("post"), iD, conn) //add possibility, to recognize user by JWT
+	user, err := db.FindUser(model.User{Name: username}, conn)
+
+	db.PostTweet(r.FormValue("post"), user.ID, conn)
 	http.ServeFile(w, r, "post_answer.html")
 }
 
 //	In this function user will view tweets
 func handleTweetView(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("jwt")
+	if err != nil {
+		if err == http.ErrNoCookie {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tokenString := c.Value
+
+	ok, status, username, err := jwt.DecodeToken(tokenString)
+	if !ok || err != nil {
+		w.WriteHeader(status)
+		return
+	}
+
+	user, err := db.FindUser(model.User{Name: username}, conn)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+	}
+
 	if err := r.ParseForm(); err != nil {
 		fmt.Fprint(w, err)
 		http.ServeFile(w, r, "error.html")
@@ -155,14 +191,7 @@ func handleTweetView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//	TODO
-	iD, err := strconv.Atoi(r.FormValue("userID")) //JWT
-	if err != nil {
-		fmt.Fprint(w, err)
-		http.ServeFile(w, r, "error.html")
-
-	}
-	tweetsString, err := db.GetTweets(iD, conn)
+	tweetsString, err := db.GetTweets(user.ID, conn)
 	if err != nil {
 		fmt.Fprint(w, err)
 		http.ServeFile(w, r, "error.html")
