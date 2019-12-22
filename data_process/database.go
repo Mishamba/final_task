@@ -3,15 +3,25 @@ package data_process
 import (
 	"database/sql"
 
-	"github.com/Mishamba/FinalTaks/model"
+	"github.com/Mishamba/final_task/model"
+	"github.com/golang-migrate/migrate"
 	_ "github.com/lib/pq"
 )
 
-const connectString = "host=127.0.0.1 port=5432 user=tweeter dbname=tweet_postgres sslmode=disable"
+const connectString = "host=127.0.0.1 port=5432 user=tweeter password=123 dbname=tweet_postgres sslmode=disable"
 
-func ConnectToSQL(conn *sql.DB) (err error) {
-	conn, err = sql.Open("postgres", connectString)
-	return
+func SQLStart(conn *sql.DB) (err error) {
+	if conn, err = sql.Open("postgres", connectString); err != nil {
+		return
+	}
+
+	if m, err := migrate.New("file:///home/go/src/github.com/Mishamba/final_task/db/migrations", "postgres://tweeter:123@localhost:5432/tweeter_postgres?sslmodedisable"); err != nil {
+
+	} else {
+		err = m.Up()
+	}
+
+	return nil
 }
 
 func AddUser(user model.User, conn *sql.DB) error {
