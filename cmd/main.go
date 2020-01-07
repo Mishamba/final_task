@@ -21,15 +21,29 @@ func main() {
 	if err != nil {
 		return
 	}
+	log.Println("server is listening")
 	router := mux.NewRouter()
 	router.HandleFunc("/", handleHomePage).Methods(http.MethodGet)
-	router.HandleFunc("/register", handleRegistrationForm).Methods(http.MethodPost)
-	router.HandleFunc("/register/data", handleRegistration).Methods(http.MethodPost)
-	router.HandleFunc("/login/data", handleLogin).Methods(http.MethodPost)
-	router.HandleFunc("/tweets", handleTweetForm).Methods(http.MethodPost)
+	router.HandleFunc("/subscribe", handleSubscribeForm).Methods(http.MethodGet)
+	router.HandleFunc("/subscribe{data}", handleSubscribe).Methods(http.MethodPost)
+	router.HandleFunc("/register", handleRegistrationForm).Methods(http.MethodGet)
+	router.HandleFunc("/register{data}", handleRegistration).Methods(http.MethodPost)
+	router.HandleFunc("/login", handleLoginForm).Methods(http.MethodGet)
+	router.HandleFunc("/login{data}", handleLogin).Methods(http.MethodPost)
+	router.HandleFunc("/tweets", handleTweetForm).Methods(http.MethodGet)
 	router.HandleFunc("/tweets/post", handleTweetCreate).Methods(http.MethodPost)
 	router.HandleFunc("/tweets", handleTweetView).Methods(http.MethodGet)
 	log.Fatal(http.ListenAndServe(":8083", router))
+}
+
+//	Just ginig form to choose user to subscribe
+func handleSubscribeForm(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "cmd/subscribe_form.html")
+}
+
+//	In this function we've got data of user to follow and we will save this info to database
+func handleSubscribe(w http.ResponseWriter, r *http.Request) {
+
 }
 
 //	In this finction we serve html form to register user
@@ -40,7 +54,8 @@ func handleRegistrationForm(w http.ResponseWriter, r *http.Request) {
 //	In this function user will create his account. After that we will send for him JWT token.
 func handleRegistration(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		fmt.Fprint(w, err)
+		log.Println(err)
+		w.WriteHeader(http.StatusUnauthorized)
 		http.ServeFile(w, r, "error.html")
 		return
 	}
@@ -56,15 +71,17 @@ func handleRegistration(w http.ResponseWriter, r *http.Request) {
 	}
 	err := db.AddUser(newUser, conn)
 	if errorCheck(w, err) {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
 		http.ServeFile(w, r, "error.html")
-
 		return
 	}
 
 	jwtToSend, expireTime, err := jwt.GeneratedToken(newUser.Name)
 	if errorCheck(w, err) {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
 		http.ServeFile(w, r, "error.html")
-
 		return
 	}
 
@@ -75,13 +92,20 @@ func handleRegistration(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+//	Just giving form to login
+func handleLoginForm(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "login.html")
+}
+
 //	In this function user will login to his account. If login passed succesfuly we will send for him JWT token.
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("jwt")
-	if err != nil {
+	if errorCheck(w, err) {
 		if err == http.ErrNoCookie {
 			if err := r.ParseForm(); err != nil {
+				log.Println(err)
 				w.WriteHeader(http.StatusInternalServerError)
+				http.ServeFile(w, r, "error.html")
 				return
 			}
 
@@ -89,13 +113,18 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			password := r.FormValue("password")
 
 			_, err := db.FindUser(model.User{Name: username, Password: password}, conn)
-			if err != nil {
+			if errorCheck(w, err) {
+				log.Println(err)
 				w.WriteHeader(http.StatusUnauthorized)
+				http.ServeFile(w, r, "error.html")
+				return
 			}
 
 			jwtToSend, expireTime, err := jwt.GeneratedToken(username)
-			if err != nil {
+			if errorCheck(w, err) {
+				log.Println(err)
 				w.WriteHeader(http.StatusInternalServerError)
+				http.ServeFile(w, r, "error.html")
 				return
 			}
 
@@ -130,9 +159,11 @@ func handleTweetForm(w http.ResponseWriter, r *http.Request) {
 //	In this function user will create and post tweet
 func handleTweetCreate(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("jwt")
-	if err != nil {
+	if errorCheck(w, err) {
 		if err == http.ErrNoCookie {
+			log.Println(err)
 			w.WriteHeader(http.StatusUnauthorized)
+			http.ServeFile(w, r, "error.html")
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
@@ -147,8 +178,9 @@ func handleTweetCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
-		fmt.Fprint(w, err)
+	if err := r.ParseForm(); errorCheck(w, err) {
+		log.Println(err)
+		w.WriteHeader(http.StatusBadRequest)
 		http.ServeFile(w, r, "error.html")
 		return
 	}
@@ -162,9 +194,11 @@ func handleTweetCreate(w http.ResponseWriter, r *http.Request) {
 //	In this function user will view tweets
 func handleTweetView(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("jwt")
-	if err != nil {
+	if errorCheck(w, err) {
 		if err == http.ErrNoCookie {
+			log.Println(err)
 			w.WriteHeader(http.StatusUnauthorized)
+			http.ServeFile(w, r, "error.html")
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
@@ -180,29 +214,33 @@ func handleTweetView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := db.FindUser(model.User{Name: username}, conn)
-	if err != nil {
+	if errorCheck(w, err) {
+		log.Println(err)
 		w.WriteHeader(http.StatusUnauthorized)
+		http.ServeFile(w, r, "error.html")
 	}
 
-	if err := r.ParseForm(); err != nil {
-		fmt.Fprint(w, err)
+	if err := r.ParseForm(); errorCheck(w, err) {
+		log.Println(err)
+		w.WriteHeader(http.StatusBadRequest)
 		http.ServeFile(w, r, "error.html")
-
 		return
 	}
 
 	tweetsString, err := db.GetTweets(user.ID, conn)
-	if err != nil {
-		fmt.Fprint(w, err)
+	if errorCheck(w, err) {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
 		http.ServeFile(w, r, "error.html")
-
+		return
 	}
 
 	tweets, err := json.Marshal(tweetsString)
-	if err != nil {
-		fmt.Fprint(w, err)
+	if errorCheck(w, err) {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
 		http.ServeFile(w, r, "error.html")
-
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")

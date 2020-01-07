@@ -2,26 +2,40 @@ package data_process
 
 import (
 	"database/sql"
+	"log"
 
 	"github.com/Mishamba/final_task/model"
 	"github.com/golang-migrate/migrate"
+	//can't find this packages
+	//"github.com/golang-migrate/migrate/v4"
+	//"github.com/golang-migrate/migrate/v4/database/postgres"
+	//_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
 )
 
-const connectString = "host=127.0.0.1 port=5432 user=tweeter password=123 dbname=tweet_postgres sslmode=disable"
+const connectString = "postgres://tweeter:123@0.0.0.0:5432/tweeter"
 
 func SQLStart(conn *sql.DB) (err error) {
 	if conn, err = sql.Open("postgres", connectString); err != nil {
+		log.Println("can't connect to db")
+		log.Println(err)
 		return
 	}
 
-	if m, err := migrate.New("file:///home/go/src/github.com/Mishamba/final_task/db/migrations", "postgres://tweeter:123@localhost:5432/tweeter_postgres?sslmodedisable"); err != nil {
-
-	} else {
-		err = m.Up()
+	if err = conn.Ping(); err != nil {
+		log.Println("can't ping...")
+		log.Println(err)
 	}
 
-	return nil
+	if m, err := migrate.New("file:///home/go/src/github.com/Mishamba/final_task/db/migrations", "postgres://tweeter:123@0.0.0.0:5432/tweeter_postgres?sslmodedisable"); err == nil {
+		err = m.Up()
+		log.Println("made migrations successfully")
+	} else {
+		log.Println("can't make migrations") //always reaches this code
+		log.Println(err)
+	}
+
+	return
 }
 
 func AddUser(user model.User, conn *sql.DB) error {
