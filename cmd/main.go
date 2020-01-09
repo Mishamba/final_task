@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	db "github.com/Mishamba/final_task/data_process"
 	jwt "github.com/Mishamba/final_task/jwt_process"
@@ -36,14 +37,80 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8083", router))
 }
 
-//	Just ginig form to choose user to subscribe
+//	Just giving form to choose user to subscribe
 func handleSubscribeForm(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("jwt")
+	if errorCheck(w, err) {
+		if err == http.ErrNoCookie {
+			log.Println(err)
+			w.WriteHeader(http.StatusBadRequest)
+			http.ServeFile(w, r, "error.html")
+			return
+		}
+	}
+
+	tokenString := c.Value
+
+	ok, status, _, err := jwt.DecodeToken(tokenString)
+	if !ok || err != nil {
+		w.WriteHeader(status)
+		return
+	}
+
 	http.ServeFile(w, r, "cmd/subscribe_form.html")
 }
 
 //	In this function we've got data of user to follow and we will save this info to database
 func handleSubscribe(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("jwt")
+	if errorCheck(w, err) {
+		if err == http.ErrNoCookie {
+			log.Println(err)
+			w.WriteHeader(http.StatusBadRequest)
+			http.ServeFile(w, r, "error.html")
+			return
+		}
+	}
 
+	tokenString := c.Value
+
+	ok, status, username, err := jwt.DecodeToken(tokenString)
+	if !ok || err != nil {
+		w.WriteHeader(status)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusUnauthorized)
+		http.ServeFile(w, r, "error.html")
+		return
+	}
+
+	someID := r.FormValue("userID")
+
+	subs, err := db.GetSubscribers(model.User{Name: username}, conn)
+
+	for i := 0; i < len(subs); i++ {
+		if someID == string(subs[i]) {
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte("already subscribed"))
+		}
+	}
+
+	sID, err := strconv.Atoi(someID)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		http.ServeFile(w, r, "error.html")
+	}
+	if db.AddSubscribers(model.User{Name: username}, sID, conn) != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		http.ServeFile(w, r, "error.html")
+		return
+	}
+
+	w.WriteHeader(200)
+	w.Write([]byte("subscriber added"))
 }
 
 //	In this finction we serve html form to register user
@@ -99,7 +166,7 @@ func handleLoginForm(w http.ResponseWriter, r *http.Request) {
 
 //	In this function user will login to his account. If login passed succesfuly we will send for him JWT token.
 func handleLogin(w http.ResponseWriter, r *http.Request) {
-	c, err := r.Cookie("jwt")
+	_, err := r.Cookie("jwt")
 	if errorCheck(w, err) {
 		if err == http.ErrNoCookie {
 			if err := r.ParseForm(); err != nil {
@@ -134,22 +201,17 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 				Expires: expireTime,
 			})
 
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(username + " authorized succesfuly. now u have jwt token"))
+
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	tokenString := c.Value
-
-	ok, status, username, err := jwt.DecodeToken(tokenString)
-	if !ok || err != nil {
-		w.WriteHeader(status)
-		return
-	}
-
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(username + " authorized succesfuly. now u have jwt token"))
+	w.Write([]byte("u already have jwt token"))
 }
 
 func handleTweetForm(w http.ResponseWriter, r *http.Request) {

@@ -9,4 +9,5 @@ CREATE TABLE Users (
     username varchar(30) NOT NULL UNIQUE,
     email    varchar(30) NOT NULL UNIQUE,
     password varchar(30) NOT NULL,
+    subscribers varchar(255),
 );

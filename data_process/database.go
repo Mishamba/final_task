@@ -6,7 +6,7 @@ import (
 
 	"github.com/Mishamba/final_task/model"
 	"github.com/golang-migrate/migrate"
-	//can't find this packages
+	//CAN'T FIND THIS PACKAGES
 	//"github.com/golang-migrate/migrate/v4"
 	//"github.com/golang-migrate/migrate/v4/database/postgres"
 	//_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -90,4 +90,38 @@ func FindUser(user model.User, conn *sql.DB) (model.User, error) {
 	}
 
 	return user, nil
+}
+
+func GetSubscribers(user model.User, conn *sql.DB) (sub string, err error) {
+	rows, err := conn.Query("SELECT subscribers FROM Users WHERE ID=$1 OR name=$2 OR email=$3", user.ID, user.Name, user.Email)
+	defer rows.Close()
+	if err != nil {
+		return sub, err
+	}
+
+	if err = rows.Scan(&user.Subscribers); err != nil {
+		return sub, err
+	}
+	return
+}
+
+func AddSubscribers(user model.User, newSub int, conn *sql.DB) error {
+	rows, err := conn.Query("SELECT subscribers FROM Users WHERE ID=$1", user.ID)
+	defer rows.Close()
+	if err != nil {
+		return err
+	}
+
+	if err = rows.Scan(&user.Subscribers); err != nil {
+		return err
+	}
+
+	user.Subscribers += "*" + string(newSub)
+
+	info, err := conn.Exec("INSERT INTO Users subscribers WHERE ID=$1", user.ID)
+	if n, _ := info.RowsAffected(); err != nil || int(n) != 0 {
+		return err
+	}
+
+	return nil
 }
